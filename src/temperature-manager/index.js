@@ -13,7 +13,7 @@ export function setOff() {
 }
 
 export function handleThermostatReading(thePlan, thermostat) {
-  if (thePlan.targetTemperature > thermostat.currentTemperature) setToHeat();
-  else if (thePlan.targetTemperature < thermostat.currentTemperature) setToCool();
+  if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) > thermostat.currentTemperature) setToHeat();
+  else if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) < thermostat.currentTemperature) setToCool();
   else setOff();
 }
