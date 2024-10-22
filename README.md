@@ -1,45 +1,10 @@
 [![Continuous Integration](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/actions/workflows/ci.yml/badge.svg)](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/actions/workflows/ci.yml)
 
-# Refactoring catalog repository template
-
-This is a quick template to help me get a new refactoring repo going.
-
-## Things to do after creating a repo off of this template
-
-1. Run `yarn tools:cli prepare-repository -r <repo_name>`. It will:
-
-- Update the `README.md` file with the actual repository name, CI badge, and commit history link
-- Update `package.json` with the repository's name and remote URL
-- Update the repo's homepage on GitHub with:
-  - A description
-  - A website link to https://github.com/kaiosilveira/refactoring
-  - The following labels: javascript, refactoring, replace-query-with-parameter-refactoring
-
-2. Replace the lorem ipsum text sections below with actual text
-
-## Useful commands
-
-- Generate markdown containing a diff with patch information based on a range of commits:
-
-```bash
-yarn tools:cli generate-diff -f <first_commit_sha> -l <last_commit_sha>
-```
-
-- To generate the commit history table for the last section, including the correct links:
-
-```bash
-yarn tools:cli generate-cmt-table -r replace-query-with-parameter-refactoring
-```
-
----
-
 ℹ️ _This repository is part of my Refactoring catalog based on Fowler's book with the same title. Please see [kaiosilveira/refactoring](https://github.com/kaiosilveira/refactoring) for more details._
 
 ---
 
-# Replace Query With Parameter
-
-**Formerly: Old name**
+# Replace Query with Parameter
 
 <table>
 <thead>
@@ -51,7 +16,11 @@ yarn tools:cli generate-cmt-table -r replace-query-with-parameter-refactoring
 <td>
 
 ```javascript
-result = initial.code;
+targetTemperature(aPlan);
+
+function targetTemperature(aPlan) {
+  currentTemperature = thermostat.currentTemperature;
+  // rest of the function
 ```
 
 </td>
@@ -59,11 +28,10 @@ result = initial.code;
 <td>
 
 ```javascript
-result = newCode();
+targetTemperature(aPlan, thermostat.currentTemperature);
 
-function newCode() {
-  return 'new code';
-}
+function targetTemperature(aPlan, currentTemperature) {
+  // rest of the function
 ```
 
 </td>
@@ -71,58 +39,186 @@ function newCode() {
 </tbody>
 </table>
 
-**Inverse of: [Another refactoring](https://github.com/kaiosilveira/refactoring)**
+**Inverse of: [Replace Parameter with Query](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring)**
 
-**Refactoring introduction and motivation** dolore sunt deserunt proident enim excepteur et cillum duis velit dolor. Aute proident laborum officia velit culpa enim occaecat officia sunt aute labore id anim minim. Eu minim esse eiusmod enim nulla Lorem. Enim velit in minim anim anim ad duis aute ipsum voluptate do nulla. Ad tempor sint dolore et ullamco aute nulla irure sunt commodo nulla aliquip.
+External dependencies are easy to use, highly available with minimal overhead, and often require no initialization, but their downsides often outweight all these positive attributes: global shared states can become complicated to manage as the codebase grows, it's harder to track side effects throughout the system, and testing the code that depend on them can become a nightmare. This refactoring sheds some light on how to move away of these cases.
 
 ## Working example
 
-**Working example general explanation** proident reprehenderit mollit non voluptate ea aliquip ad ipsum anim veniam non nostrud. Cupidatat labore occaecat labore veniam incididunt pariatur elit officia. Aute nisi in nulla non dolor ullamco ut dolore do irure sit nulla incididunt enim. Cupidatat aliquip minim culpa enim. Fugiat occaecat qui nostrud nostrud eu exercitation Lorem pariatur fugiat ea consectetur pariatur irure. Officia dolore veniam duis duis eu eiusmod cupidatat laboris duis ad proident adipisicing. Minim veniam consectetur ut deserunt fugiat id incididunt reprehenderit.
+Our working example is a program that manages the temperature of a `thermostat`, given a `HeatingPlan`. The `TemperatureManager` itself can be seen as the following set of functions:
+
+```javascript
+export function setToHeat() {
+  thermostat.mode = 'heat';
+}
+
+export function setToCool() {
+  thermostat.mode = 'cool';
+}
+
+export function setOff() {
+  thermostat.mode = 'off';
+}
+
+export function handleThermostatReading(thePlan, thermostat) {
+  if (thePlan.targetTemperature > thermostat.currentTemperature) setToHeat();
+  else if (thePlan.targetTemperature < thermostat.currentTemperature) setToCool();
+  else setOff();
+}
+```
+
+And the `HeatingPlan` looks like this:
+
+```javascript
+export class HeatingPlan {
+  constructor({ min, max }) {
+    this._min = min;
+    this._max = max;
+  }
+
+  get targetTemperature() {
+    if (thermostat.selectedTemperature > this._max) return this._max;
+    else if (thermostat.selectedTemperature < this._min) return this._min;
+    else return thermostat.selectedTemperature;
+  }
+}
+```
+
+And both of the above modules depend on a global thermostat object:
+
+```javascript
+export let thermostat = {
+  currentTemperature: 70,
+  selectedTemperature: 72,
+};
+```
+
+We know for enough time now that depending on globals is a bad idea, so our plan here is to remove the dependency `HeatingPlan` has on `thermostat`.
 
 ### Test suite
 
-Occaecat et incididunt aliquip ex id dolore. Et excepteur et ea aute culpa fugiat consectetur veniam aliqua. Adipisicing amet reprehenderit elit qui.
+`HeatingPlan`'s test suite covers returning the minimum or maximum target temperature within its predefined range if the underlying thermostat temperature is outside of the boundaries, and also returning the thermostat's temperature itself if it is within the range.
+`TemperatureManager`'s test suite covers updating the thermostat mode to either `heat`, `cool`, or `off`, depending on the circumstances.
 
-```javascript
-describe('functionBeingRefactored', () => {
-  it('should work', () => {
-    expect(0).toEqual(1);
-  });
-});
-```
-
-Magna ut tempor et ut elit culpa id minim Lorem aliqua laboris aliqua dolor. Irure mollit ad in et enim consequat cillum voluptate et amet esse. Fugiat incididunt ea nulla cupidatat magna enim adipisicing consequat aliquip commodo elit et. Mollit aute irure consequat sunt. Dolor consequat elit voluptate aute duis qui eu do veniam laborum elit quis.
+The implementation of these tests is extensive, so they'll not be shown here. You can always go ahead and check [`heating-plan/index.test.js`](./src/heating-plan/index.test.js) and [`temperature-manager/index.test.js`](./src/temperature-manager/index.test.js) for details.
 
 ### Steps
 
-**Step 1 description** mollit eu nulla mollit irure sint proident sint ipsum deserunt ad consectetur laborum incididunt aliqua. Officia occaecat deserunt in aute veniam sunt ad fugiat culpa sunt velit nulla. Pariatur anim sit minim sit duis mollit.
+As stated above, we want to get rid of the dependency `HeatingPlan` has on the global `thermostat` object. To do so, we need to receive its values as arguments, instead of directly referencing them. The strategy, then, is to turn the `targetTemperature` getter into a function, so we can receive these arguments and be free. To do so, we first need to limit the spread of `thermostat` inside `targetTemperature`. We start by [extracting](https://github.com/kaiosilveira/extract-variable-refactoring) a `selectedTemperature` variable:
 
 ```diff
-diff --git a/src/price-order/index.js b/src/price-order/index.js
-@@ -3,6 +3,11 @@
--module.exports = old;
-+module.exports = new;
+diff --git HeatingPlan
+   get targetTemperature() {
+-    if (thermostat.selectedTemperature > this._max) return this._max;
+-    else if (thermostat.selectedTemperature < this._min) return this._min;
+-    else return thermostat.selectedTemperature;
++    const selectedTemperature = thermostat.selectedTemperature;
++    if (selectedTemperature > this._max) return this._max;
++    else if (selectedTemperature < this._min) return this._min;
++    else return selectedTemperature;
+   }
 ```
 
-**Step n description** mollit eu nulla mollit irure sint proident sint ipsum deserunt ad consectetur laborum incididunt aliqua. Officia occaecat deserunt in aute veniam sunt ad fugiat culpa sunt velit nulla. Pariatur anim sit minim sit duis mollit.
+Then, we can move forward with introducing our envisioned function, naming it with an easily searcheable prefix:
 
 ```diff
-diff --git a/src/price-order/index.js b/src/price-order/index.js
-@@ -3,6 +3,11 @@
--module.exports = old;
-+module.exports = new;
+diff --git HeatingPlan
++  xxNEWtargetTemperature(selectedTemperature) {
++    if (selectedTemperature > this._max) return this._max;
++    else if (selectedTemperature < this._min) return this._min;
++    else return selectedTemperature;
++  }
 ```
 
-And that's it!
+We can then start using `xxNEWtargetTemperature` in the body of the `targetTemperature` getter:
+
+```diff
+diff --git HeatingPlan
+   get targetTemperature() {
+     const selectedTemperature = thermostat.selectedTemperature;
+-    if (selectedTemperature > this._max) return this._max;
+-    else if (selectedTemperature < this._min) return this._min;
+-    else return selectedTemperature;
++    return this.xxNEWtargetTemperature(selectedTemperature);
+   }
+```
+
+Since almost all the code has now been moved to a separate function, we don't need the `selectedTemperature` temp anymore, so we [inline it](https://github.com/kaiosilveira/inline-variable-refactoring):
+
+```diff
+diff --git HeatingPlan
+   get targetTemperature() {
+-    const selectedTemperature = thermostat.selectedTemperature;
+-    return this.xxNEWtargetTemperature(selectedTemperature);
++    return this.xxNEWtargetTemperature(thermostat.selectedTemperature);
+   }
+```
+
+And now that `targetTemperature` is simple enough, we can just [inline it](https://github.com/kaiosilveira/inline-function-refactoring) in the calling code:
+
+```diff
+diff --git TemperatureManager
+ export function handleThermostatReading(thePlan, thermostat) {
+-  if (thePlan.targetTemperature > thermostat.currentTemperature) setToHeat();
+-  else if (thePlan.targetTemperature < thermostat.currentTemperature) setToCool();
++  if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) > thermostat.currentTemperature) setToHeat();
++  else if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) < thermostat.currentTemperature) setToCool();
+   else setOff();
+ }
+```
+
+With this move, the `targetTemperature` getter is now unused, so we can [remove it](https://github.com/kaiosilveira/remove-dead-code-refactoring) from `HeatingPlan`:
+
+```diff
+diff --git HeatingPlan
+-  get targetTemperature() {
+-    return this.xxNEWtargetTemperature(thermostat.selectedTemperature);
+-  }
+```
+
+And now we can reach our goal: `HeatingPlan` does not depend on `thermostat` any longer:
+
+```diff
+diff --git HeatingPlan
+-import { thermostat } from '../thermostat.js';
+-
+ export class HeatingPlan {
+   constructor({ min, max }) {
+     this._min = min;
+```
+
+Last, but not least, we can rename `xxNEWtargetTemperature` to `targetTemperature`:
+
+```diff
+diff --git HeatingPlan
+-  xxNEWtargetTemperature(selectedTemperature) {
++  targetTemperature(selectedTemperature) {
+
+diff --git TemperatureManager
+ export function handleThermostatReading(thePlan, thermostat) {
+-  if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) > thermostat.currentTemperature) setToHeat();
+-  else if (thePlan.xxNEWtargetTemperature(thermostat.selectedTemperature) < thermostat.currentTemperature) setToCool();
++  if (thePlan.targetTemperature(thermostat.selectedTemperature) > thermostat.currentTemperature) setToHeat();
++  else if (thePlan.targetTemperature(thermostat.selectedTemperature) < thermostat.currentTemperature) setToCool();
+   else setOff();
+ }
+```
+
+And that finishes off our work.
 
 ### Commit history
 
 Below there's the commit history for the steps detailed above.
 
-| Commit SHA                                                                  | Message                  |
-| --------------------------------------------------------------------------- | ------------------------ |
-| [cmt-sha-1](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/commit-SHA-1) | description of commit #1 |
-| [cmt-sha-2](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/commit-SHA-2) | description of commit #2 |
-| [cmt-sha-n](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/commit-SHA-n) | description of commit #n |
+| Commit SHA                                                                                                                          | Message                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [4d39669](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/4d3966925ce840f7d98bb81c7d15a41bbea2a981) | extract `selectedTemperature` variable at `HeatingPlan.targetTemperature` |
+| [02b5f18](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/02b5f18ea615ad331f03105c2663ba6884275fb8) | introduce `xxNEWtargetTemperature` at `HeatingPlan`                       |
+| [cf7ca0e](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/cf7ca0e3dc7482cd228c1a98838bfb4e301a7e13) | use `xxNEWtargetTemperature` at `HeatingPlan.targetTemperature`           |
+| [df7fa43](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/df7fa4390cc87ceb0a4fdee488f8c6bb2066ed61) | inline `selectedTemperature` at `HeatingPlan.targetTemperature`           |
+| [7720516](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/7720516c9633e199dcd0384a62093a433bc6ce88) | inline `targetTemperature` function at `handleThermostatReading`          |
+| [5c253c3](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/5c253c3dc974eef466df7836e45deec46c256a33) | remove unused `targetTemperature` getter at `HeatingPlan`                 |
+| [900bba3](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/900bba35b615e22ec26280e172a28105c41a3470) | remove `thermostat` import at `HeatingPlan`                               |
+| [11fc72f](https://github.com/kaiosilveira/replace-parameter-with-query-refactoring/commit/11fc72f57a5ff4e02b9e60fce619c735b9376269) | rename `xxNEWtargetTemperature` to `targetTemperature` at `HeatingPlan`   |
 
 For the full commit history for this project, check the [Commit History tab](https://github.com/kaiosilveira/replace-query-with-parameter-refactoring/commits/main).
